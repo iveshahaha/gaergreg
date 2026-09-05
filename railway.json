@@ -1,4 +1,4 @@
-// === railway.json (OPTIONAL - FORCES NODE BUILD ON RAILWAY) ===
+
 {
   "build": {
     "builder": "NIXPACKS",
